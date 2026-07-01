@@ -231,12 +231,10 @@ impl NatTypeDetector {
                 tracing::debug!(source_port, ?mapped_addr, "stun mapped addr with upnp port");
 
                 // STUN连接关闭后端口可能处于TIME_WAIT，用SO_REUSEADDR绑定
-                use socket2::{Domain, Protocol, Socket, Type};
-                let sock = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
-                sock.set_reuse_address(true)?;
-                sock.bind(&socket2::SockAddr::from(format!("0.0.0.0:{}", source_port).parse::<SocketAddr>().unwrap()))?;
-                sock.listen(1)?;
-                let listener = tokio::net::TcpListener::from_std(sock.into())?;
+                let listener_socket = tokio::net::TcpSocket::new_v4()?;
+                listener_socket.set_reuseaddr(true)?;
+                listener_socket.bind(SocketAddr::new("0.0.0.0".parse()?, source_port))?;
+                let listener = listener_socket.listen(1)?;
                 tracing::debug!(source_port, "tcp listener created");
 
                 // 测试STUN返回的外部端口是否可达
@@ -323,35 +321,15 @@ impl NatTypeDetector {
 
     /// TCP STUN测试，返回stream保持连接活跃
     async fn tcp_test(&self, stun_host: SocketAddr, source_port: u16) -> Result<(tokio::net::TcpStream, SocketAddr), anyhow::Error> {
-        use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
-
         tracing::debug!(?stun_host, source_port, "tcp_test start");
 
-        let socket = Socket::new(
-            Domain::IPV4,
-            Type::STREAM,
-            Some(Protocol::TCP),
-        )?;
-
-        socket.set_nonblocking(true)?;
-        socket.set_reuse_address(true)?;
-
-        // Windows上也需要设置reuse_port
-        #[cfg(unix)]
-        {
-            let _ = socket.set_reuse_port(true);
-        }
-
-        let bind_addr = SocketAddr::new("0.0.0.0".parse()?, source_port);
-        socket.bind(&SockAddr::from(bind_addr))?;
+        let socket = tokio::net::TcpSocket::new_v4()?;
+        socket.set_reuseaddr(true)?;
+        socket.bind(SocketAddr::new("0.0.0.0".parse()?, source_port))?;
         tracing::debug!(source_port, "socket bound to port");
 
-        let socket = tokio::net::TcpSocket::from_std_stream(socket.into());
         let mut stream = socket.connect(stun_host).await?;
         tracing::debug!(?stun_host, source_port, "connected to stun server");
-
-        // 设置linger选项为0，确保端口立即释放
-        let _ = SockRef::from(&stream).set_linger(Some(std::time::Duration::ZERO));
 
         // 发送STUN绑定请求
         let tid = rand::random::<u128>();
