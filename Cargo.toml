@@ -1,0 +1,22 @@
+[package]
+name = "nattype"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "nattype"
+path = "src/main.rs"
+
+[dependencies]
+stun_codec = "0.3.4"
+bytecodec = "0.4.15"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.11", features = ["json"] }
+clap = { version = "4", features = ["derive"] }
+rand = "0.8"
+igd-next = { version = "0.17.0", features = ["aio_tokio"] }
+natpmp = "0.5.0"
+socket2 = "0.5"
